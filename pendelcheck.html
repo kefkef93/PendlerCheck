@@ -1,0 +1,431 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pendelcheck</title>
+<style>
+  :root {
+    --bg: #F7F6F2;
+    --card: #FFFFFF;
+    --border: #E4E1D8;
+    --text: #211F1C;
+    --text-secondary: #6B685F;
+    --text-muted: #9C988C;
+    --accent: #1D6E52;
+    --accent-bg: #E1F0E8;
+    --warn: #B4590E;
+    --warn-bg: #FBEADC;
+    --danger: #A32D2D;
+    --danger-bg: #FCEBEB;
+    --radius: 10px;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.5;
+  }
+  .wrap { max-width: 760px; margin: 0 auto; padding: 2rem 1.25rem 4rem; }
+  header { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; margin-bottom: 1.75rem; flex-wrap: wrap; }
+  h1 { font-size: 22px; font-weight: 600; margin: 0 0 4px; }
+  .subtitle { font-size: 14px; color: var(--text-secondary); margin: 0; }
+  button {
+    font: inherit; font-size: 14px; font-weight: 500;
+    background: var(--card); color: var(--text);
+    border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 9px 16px; cursor: pointer;
+  }
+  button:hover { background: #F0EEE7; }
+  button:disabled { opacity: 0.5; cursor: default; }
+  .btn-primary { background: var(--accent); color: white; border-color: var(--accent); }
+  .btn-primary:hover { background: #175E44; }
+  .banner {
+    font-size: 13px; padding: 10px 14px; border-radius: var(--radius);
+    margin-bottom: 1.25rem; display: none;
+  }
+  .banner.show { display: block; }
+  .banner.demo { background: var(--warn-bg); color: var(--warn); }
+  .banner.error { background: var(--danger-bg); color: var(--danger); }
+  .banner li { font-size: 12.5px; margin-top: 2px; }
+  .banner code { background: rgba(0,0,0,0.06); padding: 1px 5px; border-radius: 4px; font-size: 12px; }
+  .section-title { font-size: 16px; font-weight: 600; margin: 0 0 10px; display: flex; align-items: center; gap: 8px; }
+  .section-title .time { font-size: 12px; font-weight: 500; color: var(--text-secondary); background: var(--accent-bg); padding: 2px 9px; border-radius: 20px; }
+  .block { margin-bottom: 2.25rem; }
+  .cards { display: grid; gap: 12px; }
+  .card {
+    background: var(--card); border: 1px solid var(--border); border-radius: 12px;
+    padding: 16px 18px; position: relative;
+  }
+  .card.best { border: 2px solid var(--accent); }
+  .badge {
+    display: inline-block; font-size: 12px; font-weight: 500;
+    background: var(--accent-bg); color: var(--accent);
+    padding: 3px 10px; border-radius: 20px; margin-bottom: 8px;
+  }
+  .route-name { font-size: 15px; font-weight: 600; margin-bottom: 10px; display: flex; align-items: center; gap: 8px; }
+  .row { display: flex; justify-content: space-between; font-size: 13.5px; padding: 4px 0; border-top: 1px solid #EFEDE6; }
+  .row:first-of-type { border-top: none; }
+  .row .k { color: var(--text-secondary); }
+  .row .v { font-weight: 500; }
+  .v.delay-ok { color: var(--accent); }
+  .v.delay-mid { color: var(--warn); }
+  .v.delay-bad { color: var(--danger); }
+  .trains { margin-top: 12px; padding-top: 10px; border-top: 1px solid #EFEDE6; }
+  .trains-title { font-size: 12px; color: var(--text-muted); margin-bottom: 6px; }
+  .train-row { display: flex; align-items: center; gap: 10px; font-size: 13px; padding: 5px 0; }
+  .train-row .time { font-weight: 600; min-width: 46px; }
+  .train-row .arrow { color: var(--text-muted); }
+  .train-row .arr { min-width: 46px; }
+  .train-row .arr.delay-ok { color: var(--accent); }
+  .train-row .arr.delay-mid { color: var(--warn); }
+  .train-row .arr.delay-bad { color: var(--danger); }
+  .train-row .line { color: var(--text-secondary); font-size: 12px; }
+  .train-row .cancelled { color: var(--danger); font-size: 12px; text-decoration: line-through; }
+  section.history { margin-top: 0.5rem; }
+  .hist-title { font-size: 13px; color: var(--text-secondary); margin-bottom: 8px; }
+  .hist-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px,1fr)); gap: 8px; }
+  .hist-card { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 10px 12px; }
+  .hist-card .name { font-size: 12px; color: var(--text-secondary); }
+  .hist-card .num { font-size: 16px; font-weight: 600; margin: 2px 0; }
+  .hist-card .sub { font-size: 12px; color: var(--text-muted); }
+  details { margin-top: 1rem; font-size: 13.5px; color: var(--text-secondary); }
+  summary { cursor: pointer; font-weight: 500; color: var(--text); }
+  .foot { font-size: 12px; color: var(--text-muted); margin-top: 2rem; }
+  .spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.7s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <h1 id="dayTitle">Pendelcheck</h1>
+      <p class="subtitle">Hinfahrt: Ankunft bis 07:40 Uhr &middot; Rückfahrt: ab 16:40 Uhr</p>
+    </div>
+    <button class="btn-primary" id="checkBtn">Strecken prüfen</button>
+  </header>
+
+  <div class="banner demo" id="demoBanner">
+    <div id="bannerText">Live-Daten aktuell nicht erreichbar &ndash; es werden Demo-Werte angezeigt.</div>
+    <ul id="errorList" style="margin: 6px 0 0; padding-left: 18px; display: none;"></ul>
+  </div>
+
+  <div class="block">
+    <div class="section-title">Hinfahrt <span class="time">Ankunft bis 07:40</span></div>
+    <div class="cards" id="cardsOut"></div>
+  </div>
+
+  <div class="block">
+    <div class="section-title">Rückfahrt <span class="time">Abfahrt ab 16:40</span></div>
+    <div class="cards" id="cardsReturn"></div>
+  </div>
+
+  <section class="history block">
+    <div class="hist-title">Verlauf Hinfahrt (gespeichert auf diesem Gerät)</div>
+    <div class="hist-grid" id="histGridOut"></div>
+  </section>
+
+  <section class="history block">
+    <div class="hist-title">Verlauf Rückfahrt (gespeichert auf diesem Gerät)</div>
+    <div class="hist-grid" id="histGridReturn"></div>
+  </section>
+
+  <details>
+    <summary>Wie funktioniert das?</summary>
+    <p>
+      Die App fragt für jede der drei Strecken &ndash; sowohl für die Hinfahrt als auch für die Rückfahrt &ndash; die
+      passenden Verbindungen über die öffentliche, kostenlose Bahn-Schnittstelle <code>v6.db.transport.rest</code> ab
+      und vergleicht geplante mit tatsächlich erwarteter Ankunft. Für die Hinfahrt werden die nächsten verfügbaren
+      Verbindungen genutzt, für die Rückfahrt gezielt die Verbindungen ab 16:40 Uhr. Jede Prüfung wird lokal in
+      deinem Browser gespeichert, damit sich mit der Zeit ein Verlauf aufbaut.
+    </p>
+    <p>
+      Ist die Schnittstelle nicht erreichbar (z. B. wegen Netzwerkbeschränkungen), zeigt die App stattdessen
+      plausible Demo-Werte, damit du siehst, wie die Auswertung aussehen würde.
+    </p>
+  </details>
+
+  <p class="foot">Strecken: Wustermark ⇄ Berlin Jungfernheide &middot; Nauen ⇄ Berlin Jungfernheide &middot; Brandenburg (Havel) ⇄ Berlin Charlottenburg</p>
+</div>
+
+<script>
+const ROUTES_OUT = [
+  { id: 'wustermark', from: 'Wustermark, Bahnhof', to: 'Berlin Jungfernheide' },
+  { id: 'nauen', from: 'Nauen, Bahnhof', to: 'Berlin Jungfernheide' },
+  { id: 'brandenburg', from: 'Brandenburg (Havel) Hbf', to: 'Berlin Charlottenburg' }
+];
+const ROUTES_RETURN = ROUTES_OUT.map(r => ({ id: r.id, from: r.to, to: r.from }));
+
+const API = 'https://v6.db.transport.rest';
+const STORAGE_KEY_OUT = 'pendelcheck_history_v1';
+const STORAGE_KEY_RETURN = 'pendelcheck_history_return_v1';
+const STATION_CACHE_KEY = 'pendelcheck_stations_v1';
+
+const days = ['Sonntag','Montag','Dienstag','Mittwoch','Donnerstag','Freitag','Samstag'];
+document.getElementById('dayTitle').textContent = 'Pendelcheck – ' + days[new Date().getDay()];
+
+function loadJSON(key) {
+  try { return JSON.parse(localStorage.getItem(key)) || {}; }
+  catch { return {}; }
+}
+function saveJSON(key, val) {
+  localStorage.setItem(key, JSON.stringify(val));
+}
+
+async function findStationId(name, cache) {
+  if (cache[name]) return cache[name];
+  const res = await fetch(API + '/locations?query=' + encodeURIComponent(name) + '&results=1&poi=false&addresses=false');
+  if (!res.ok) throw new Error('Stationssuche fehlgeschlagen (HTTP ' + res.status + ') für "' + name + '"');
+  const data = await res.json();
+  if (!data.length) throw new Error('Keine Station gefunden für "' + name + '"');
+  cache[name] = data[0].id;
+  saveJSON(STATION_CACHE_KEY, cache);
+  return data[0].id;
+}
+
+function fmtTime(iso) {
+  if (!iso) return '--:--';
+  return new Date(iso).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Berlin' });
+}
+
+// Returns an ISO datetime for the next occurrence of hh:mm (today, or tomorrow if already passed)
+function nextDeparture(hh, mm) {
+  const d = new Date();
+  d.setHours(hh, mm, 0, 0);
+  if (d.getTime() < Date.now()) d.setDate(d.getDate() + 1);
+  return d.toISOString();
+}
+
+async function checkRoute(route, cache, departureISO) {
+  const fromId = await findStationId(route.from, cache);
+  const toId = await findStationId(route.to, cache);
+  let url = API + '/journeys?from=' + fromId + '&to=' + toId + '&results=3&stopovers=false';
+  if (departureISO) url += '&departure=' + encodeURIComponent(departureISO);
+  const res = await fetch(url);
+  if (!res.ok) throw new Error('Verbindungssuche fehlgeschlagen (HTTP ' + res.status + ') für ' + route.from + ' → ' + route.to);
+  const data = await res.json();
+  const journeys = data.journeys || [];
+  if (!journeys.length) throw new Error('Keine Verbindungen gefunden für ' + route.from + ' → ' + route.to);
+
+  let bestDelayMin = null;
+  let anyCancelled = false;
+  let worstDelayMin = 0;
+  const trains = [];
+
+  journeys.slice(0, 3).forEach(j => {
+    const firstLeg = j.legs[0];
+    const lastLeg = j.legs[j.legs.length - 1];
+    const cancelled = j.legs.some(l => l.cancelled);
+    const plannedArr = lastLeg.plannedArrival ? new Date(lastLeg.plannedArrival) : null;
+    const actualArr = lastLeg.arrival ? new Date(lastLeg.arrival) : plannedArr;
+    const delayMin = (plannedArr && actualArr) ? Math.round((actualArr - plannedArr) / 60000) : 0;
+    const lineName = (firstLeg.line && firstLeg.line.name) ? firstLeg.line.name : (firstLeg.walking ? 'Fußweg' : '');
+
+    trains.push({
+      dep: fmtTime(firstLeg.departure || firstLeg.plannedDeparture),
+      arr: fmtTime(lastLeg.arrival || lastLeg.plannedArrival),
+      delay: Math.max(0, delayMin),
+      cancelled,
+      transfers: j.legs.filter(l => !l.walking).length - 1,
+      line: lineName
+    });
+
+    if (cancelled) anyCancelled = true;
+    worstDelayMin = Math.max(worstDelayMin, delayMin);
+    if (bestDelayMin === null || delayMin < bestDelayMin) bestDelayMin = delayMin;
+  });
+
+  let prob = 98 - (worstDelayMin * 3) - (anyCancelled ? 25 : 0);
+  prob = Math.max(35, Math.min(99, Math.round(prob)));
+
+  return {
+    id: route.id,
+    name: route.from.split(',')[0] + ' → ' + route.to,
+    verspaetung: Math.max(0, bestDelayMin ?? 0),
+    ausfall: anyCancelled,
+    prob,
+    trains,
+    demo: false
+  };
+}
+
+function demoData(route, baseHour, baseMin) {
+  const baustelle = Math.random() < 0.15;
+  const ausfall = Math.random() < 0.08;
+  const verspaetung = ausfall ? (15 + Math.round(Math.random()*15)) : Math.round(Math.random() * (baustelle ? 12 : 8));
+  let prob = 98 - verspaetung*2 - (baustelle?8:0) - (ausfall?20:0);
+  prob = Math.max(40, Math.min(99, Math.round(prob)));
+
+  const trains = [0, 1, 2].map(i => {
+    const depMinTotal = baseHour * 60 + baseMin + i * 20;
+    const depHour = Math.floor(depMinTotal / 60) % 24;
+    const depM = depMinTotal % 60;
+    const travelMin = 55 + Math.round(Math.random() * 10);
+    const cancelled = i === 0 && ausfall;
+    const thisDelay = i === 0 ? verspaetung : Math.round(Math.random() * 6);
+    const arrTotal = depMinTotal + travelMin + thisDelay;
+    const arrHour = Math.floor(arrTotal / 60) % 24;
+    const arrMin = arrTotal % 60;
+    return {
+      dep: String(depHour).padStart(2,'0') + ':' + String(depM).padStart(2,'0'),
+      arr: String(arrHour).padStart(2,'0') + ':' + String(arrMin).padStart(2,'0'),
+      delay: thisDelay,
+      cancelled,
+      transfers: Math.random() < 0.3 ? 1 : 0,
+      line: ['RE4','RB10','RE6'][i % 3]
+    };
+  });
+
+  return {
+    id: route.id,
+    name: route.from.split(',')[0] + ' → ' + route.to,
+    verspaetung,
+    ausfall,
+    prob,
+    trains,
+    demo: true
+  };
+}
+
+function delayClass(min) {
+  if (min <= 3) return 'delay-ok';
+  if (min <= 10) return 'delay-mid';
+  return 'delay-bad';
+}
+
+function renderCards(results, containerId) {
+  const best = results.reduce((a,b) => b.prob > a.prob ? b : a);
+  const cardsEl = document.getElementById(containerId);
+  cardsEl.innerHTML = '';
+  results.forEach(r => {
+    const isBest = r.id === best.id;
+    const card = document.createElement('div');
+    card.className = 'card' + (isBest ? ' best' : '');
+
+    let trainsHtml = '';
+    if (r.trains && r.trains.length) {
+      const rows = r.trains.map(t => {
+        if (t.cancelled) {
+          return '<div class="train-row"><span class="time">' + t.dep + '</span><span class="arrow">→</span><span class="cancelled">Zug fällt aus</span></div>';
+        }
+        const transferText = t.transfers > 0 ? (t.transfers + ' Umstieg' + (t.transfers > 1 ? 'e' : '')) : 'direkt';
+        return '<div class="train-row">' +
+          '<span class="time">' + t.dep + '</span>' +
+          '<span class="arrow">→</span>' +
+          '<span class="arr ' + delayClass(t.delay) + '">' + t.arr + '</span>' +
+          '<span class="line">' + [t.line, transferText].filter(Boolean).join(' · ') + (t.delay > 0 ? ' · +' + t.delay + ' Min' : '') + '</span>' +
+          '</div>';
+      }).join('');
+      trainsHtml = '<div class="trains"><div class="trains-title">Nächste Verbindungen</div>' + rows + '</div>';
+    }
+
+    card.innerHTML =
+      (isBest ? '<div class="badge">Empfehlung</div>' : '') +
+      '<div class="route-name">' + r.name + '</div>' +
+      '<div class="row"><span class="k">Prognostizierte Zuverlässigkeit</span><span class="v">' + r.prob + ' %</span></div>' +
+      '<div class="row"><span class="k">Erwartete Verspätung</span><span class="v ' + delayClass(r.verspaetung) + '">' + r.verspaetung + ' Min</span></div>' +
+      '<div class="row"><span class="k">Zugausfall</span><span class="v">' + (r.ausfall ? 'Ja' : 'Nein') + '</span></div>' +
+      trainsHtml;
+    cardsEl.appendChild(card);
+  });
+}
+
+function renderHistory(routes, storageKey, gridId) {
+  const hist = loadJSON(storageKey);
+  const histEl = document.getElementById(gridId);
+  histEl.innerHTML = '';
+  routes.forEach(route => {
+    const entries = hist[route.id] || [];
+    const label = route.from.split(',')[0];
+    if (!entries.length) {
+      const div = document.createElement('div');
+      div.className = 'hist-card';
+      div.innerHTML = '<div class="name">' + label + '</div><div class="sub">noch keine Daten</div>';
+      histEl.appendChild(div);
+      return;
+    }
+    const avgDelay = (entries.reduce((s,e) => s + e.verspaetung, 0) / entries.length).toFixed(1);
+    const punctual = Math.round(100 * entries.filter(e => e.verspaetung <= 5 && !e.ausfall).length / entries.length);
+    const div = document.createElement('div');
+    div.className = 'hist-card';
+    div.innerHTML =
+      '<div class="name">' + label + '</div>' +
+      '<div class="num">' + punctual + ' % pünktlich</div>' +
+      '<div class="sub">' + avgDelay + ' Min ø Verspätung &middot; ' + entries.length + ' Prüfungen</div>';
+    histEl.appendChild(div);
+  });
+}
+
+function recordHistory(results, storageKey) {
+  const hist = loadJSON(storageKey);
+  results.forEach(r => {
+    if (!hist[r.id]) hist[r.id] = [];
+    hist[r.id].push({ date: new Date().toISOString(), verspaetung: r.verspaetung, ausfall: r.ausfall });
+    if (hist[r.id].length > 60) hist[r.id] = hist[r.id].slice(-60);
+  });
+  saveJSON(storageKey, hist);
+}
+
+async function runCheck() {
+  const btn = document.getElementById('checkBtn');
+  const banner = document.getElementById('demoBanner');
+  const bannerText = document.getElementById('bannerText');
+  const errorList = document.getElementById('errorList');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> Prüfe...';
+  banner.className = 'banner';
+  errorList.style.display = 'none';
+  errorList.innerHTML = '';
+
+  const cache = loadJSON(STATION_CACHE_KEY);
+  const errors = [];
+
+  const returnDeparture = nextDeparture(16, 40);
+
+  const resultsOut = [];
+  for (const route of ROUTES_OUT) {
+    try {
+      resultsOut.push(await checkRoute(route, cache));
+    } catch (e) {
+      errors.push('Hinfahrt ' + route.from.split(',')[0] + ': ' + e.message);
+      resultsOut.push(demoData(route, 5, 40));
+    }
+  }
+
+  const resultsReturn = [];
+  for (const route of ROUTES_RETURN) {
+    try {
+      resultsReturn.push(await checkRoute(route, cache, returnDeparture));
+    } catch (e) {
+      errors.push('Rückfahrt ' + route.to.split(',')[0] + ': ' + e.message);
+      resultsReturn.push(demoData(route, 16, 40));
+    }
+  }
+
+  if (errors.length) {
+    banner.classList.add('show', 'demo');
+    bannerText.textContent = errors.length + ' von 6 Strecken konnten nicht live abgerufen werden – dafür werden Demo-Werte angezeigt:';
+    errorList.innerHTML = errors.map(e => '<li>' + e + '</li>').join('');
+    errorList.style.display = 'block';
+  }
+
+  renderCards(resultsOut, 'cardsOut');
+  renderCards(resultsReturn, 'cardsReturn');
+  recordHistory(resultsOut, STORAGE_KEY_OUT);
+  recordHistory(resultsReturn, STORAGE_KEY_RETURN);
+  renderHistory(ROUTES_OUT, STORAGE_KEY_OUT, 'histGridOut');
+  renderHistory(ROUTES_RETURN, STORAGE_KEY_RETURN, 'histGridReturn');
+
+  btn.disabled = false;
+  btn.textContent = 'Erneut prüfen';
+}
+
+document.getElementById('checkBtn').addEventListener('click', runCheck);
+renderHistory(ROUTES_OUT, STORAGE_KEY_OUT, 'histGridOut');
+renderHistory(ROUTES_RETURN, STORAGE_KEY_RETURN, 'histGridReturn');
+</script>
+</body>
+</html>
