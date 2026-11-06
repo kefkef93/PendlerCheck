@@ -17,5 +17,5 @@ refresh_minutes: 10   # 0 = kein Auto-Refresh
 #   - { id: nauen, from: "Nauen, Bahnhof", to: "Berlin Jungfernheide" }
 ```
 
-Die Karte fragt `v6.db.transport.rest` direkt aus dem Browser ab. Der Verlauf liegt
-wie bei der Webseite im `localStorage` des jeweiligen Geräts.
+Die Karte fragt `v6.vbb.transport.rest` bzw. `v6.db.transport.rest`
+direkt aus dem Browser ab (zuerst VBB, sonst DB). Der Verlauf liegt wie bei der Webseite im `localStorage` des jeweiligen Geräts.

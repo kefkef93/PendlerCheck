@@ -5,16 +5,17 @@
 //   title, arrive_by ("07:40"), return_from ("16:40"),
 //   refresh_minutes (Standard 10, 0 = aus), auto_check (true),
 //   routes: [{ id, from, to }]   (Hinfahrt; Rückfahrt = umgedreht)
-//   api ("https://v6.db.transport.rest")
+//   apis (["https://v6.vbb.transport.rest", "https://v6.db.transport.rest"])
+//   – werden der Reihe nach probiert, die erste funktionierende gewinnt.
 
 const PC_DEFAULT_ROUTES = [
-  { id: 'wustermark', from: 'Wustermark, Bahnhof', to: 'Berlin Jungfernheide' },
-  { id: 'nauen', from: 'Nauen, Bahnhof', to: 'Berlin Jungfernheide' },
-  { id: 'brandenburg', from: 'Brandenburg (Havel) Hbf', to: 'Berlin Charlottenburg' }
+  { id: 'wustermark', from: 'Wustermark Bahnhof', to: 'Berlin Jungfernheide' },
+  { id: 'nauen', from: 'Nauen Bahnhof', to: 'Berlin Jungfernheide' },
+  { id: 'brandenburg', from: 'Brandenburg Hauptbahnhof', to: 'Berlin Charlottenburg Bahnhof' }
 ];
 const PC_KEY_OUT = 'pendelcheck_history_v1';
 const PC_KEY_RET = 'pendelcheck_history_return_v1';
-const PC_KEY_STATIONS = 'pendelcheck_stations_v1';
+const PC_KEY_STATIONS = 'pendelcheck_stations_v2';
 const PC_DAYS = ['Sonntag', 'Montag', 'Dienstag', 'Mittwoch', 'Donnerstag', 'Freitag', 'Samstag'];
 
 function pcLoad(key) {
@@ -55,9 +56,10 @@ class PendelcheckCard extends HTMLElement {
       return_from: '16:40',
       refresh_minutes: 10,
       auto_check: true,
-      api: 'https://v6.db.transport.rest',
+      apis: ['https://v6.vbb.transport.rest', 'https://v6.db.transport.rest'],
       routes: PC_DEFAULT_ROUTES
     }, config || {});
+    if (this.config.api) this.config.apis = [this.config.api];
     this.routesOut = this.config.routes;
     this.routesRet = this.routesOut.map(r => ({ id: r.id, from: r.to, to: r.from }));
     if (!this.shadowRoot) this.attachShadow({ mode: 'open' });
@@ -171,19 +173,35 @@ class PendelcheckCard extends HTMLElement {
     } finally { clearTimeout(t); }
   }
 
-  async _station(name, cache) {
-    if (cache[name]) return cache[name];
-    const data = await this._fetchJSON(this.config.api + '/locations?query=' + encodeURIComponent(name) + '&results=1&poi=false&addresses=false');
-    if (!data.length) throw new Error('Keine Station gefunden für "' + name + '"');
-    cache[name] = data[0].id;
+  async _station(api, name, cache) {
+    const key = api + '|' + name;
+    if (cache[key]) return cache[key];
+    const data = await this._fetchJSON(api + '/locations?query=' + encodeURIComponent(name) + '&results=1&poi=false&addresses=false');
+    if (!Array.isArray(data) || !data.length) throw new Error('Keine Station gefunden für "' + name + '"');
+    cache[key] = data[0].id;
     pcSave(PC_KEY_STATIONS, cache);
     return data[0].id;
   }
 
   async _checkRoute(route, cache, opts) {
-    const fromId = await this._station(route.from, cache);
-    const toId = await this._station(route.to, cache);
-    let url = this.config.api + '/journeys?from=' + fromId + '&to=' + toId + '&results=3&stopovers=false';
+    let lastErr = null;
+    for (const api of this.config.apis) {
+      try {
+        const r = await this._checkRouteApi(api, route, cache, opts);
+        r.source = api.replace(/^https?:\/\//, '');
+        return r;
+      } catch (e) {
+        lastErr = e;
+        console.warn('[pendelcheck]', api, route.from, '→', route.to, e);
+      }
+    }
+    throw lastErr || new Error('Keine Schnittstelle erreichbar');
+  }
+
+  async _checkRouteApi(api, route, cache, opts) {
+    const fromId = await this._station(api, route.from, cache);
+    const toId = await this._station(api, route.to, cache);
+    let url = api + '/journeys?from=' + encodeURIComponent(fromId) + '&to=' + encodeURIComponent(toId) + '&results=3&stopovers=false&polylines=false';
     if (opts.departure) url += '&departure=' + encodeURIComponent(opts.departure);
     if (opts.arrival) url += '&arrival=' + encodeURIComponent(opts.arrival);
     const data = await this._fetchJSON(url);
@@ -217,6 +235,21 @@ class PendelcheckCard extends HTMLElement {
   async runCheck() {
     if (this._busy) return;
     this._busy = true;
+    try { await this._runCheck(); }
+    catch (e) {
+      console.error('[pendelcheck]', e);
+      const b = this.shadowRoot.getElementById('banner');
+      b.classList.add('show');
+      this.shadowRoot.getElementById('btext').textContent = 'Fehler: ' + e.message;
+    } finally {
+      const btn = this.shadowRoot.getElementById('btn');
+      btn.disabled = false;
+      btn.textContent = 'Erneut prüfen';
+      this._busy = false;
+    }
+  }
+
+  async _runCheck() {
     const $ = id => this.shadowRoot.getElementById(id);
     const btn = $('btn');
     btn.disabled = true;
@@ -231,7 +264,7 @@ class PendelcheckCard extends HTMLElement {
 
     const run = async (routes, opts, label, nameOf) => Promise.all(routes.map(r =>
       this._checkRoute(r, cache, opts).catch(e => {
-        errors.push(label + ' ' + nameOf(r) + ': ' + (e.name === 'AbortError' ? 'Zeitüberschreitung' : e.message));
+        errors.push(label + ' ' + nameOf(r) + ': ' + (e.name === 'AbortError' ? 'Zeitüberschreitung' : (e.message === 'Failed to fetch' ? 'Schnittstelle nicht erreichbar' : e.message)));
         return { id: r.id, name: pcShort(r.from) + ' → ' + r.to, error: true };
       })));
 
@@ -253,10 +286,8 @@ class PendelcheckCard extends HTMLElement {
     this._renderHistory(this.routesOut, PC_KEY_OUT, 'hout');
     this._renderHistory(this.routesRet, PC_KEY_RET, 'hret');
 
-    $('updated').textContent = 'Zuletzt geprüft: ' + new Date().toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
-    btn.disabled = false;
-    btn.textContent = 'Erneut prüfen';
-    this._busy = false;
+    const src = [...new Set(out.concat(ret).map(r => r.source).filter(Boolean))].join(', ');
+    $('updated').textContent = 'Zuletzt geprüft: ' + new Date().toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' }) + (src ? ' · Quelle: ' + src : '');
   }
 
   _renderCards(results, id) {
