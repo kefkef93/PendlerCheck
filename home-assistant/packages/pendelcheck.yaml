@@ -1,0 +1,221 @@
+# Pendelcheck – Home-Assistant-Paket
+# Ablage: /config/packages/pendelcheck.yaml
+# Voraussetzung in configuration.yaml:
+#   homeassistant:
+#     packages: !include_dir_named packages
+#
+# Datenquelle: https://v6.vbb.transport.rest (VBB-Echtzeitdaten)
+# Hinfahrt: Verbindungen mit Ankunft bis 07:40, Rückfahrt: Abfahrt ab 16:40.
+
+rest:
+  - resource: 'https://v6.vbb.transport.rest/locations?query=Wustermark%20Bahnhof&results=1&poi=false&addresses=false'
+    scan_interval: 86400
+    timeout: 20
+    sensor:
+      - name: "Pendelcheck Station Wustermark"
+        unique_id: pendelcheck_station_wustermark
+        icon: mdi:train-car
+        value_template: "{{ value_json[0].id if value_json is iterable and value_json | count > 0 else none }}"
+
+  - resource: 'https://v6.vbb.transport.rest/locations?query=Nauen%20Bahnhof&results=1&poi=false&addresses=false'
+    scan_interval: 86400
+    timeout: 20
+    sensor:
+      - name: "Pendelcheck Station Nauen"
+        unique_id: pendelcheck_station_nauen
+        icon: mdi:train-car
+        value_template: "{{ value_json[0].id if value_json is iterable and value_json | count > 0 else none }}"
+
+  - resource: 'https://v6.vbb.transport.rest/locations?query=Brandenburg%20Hauptbahnhof&results=1&poi=false&addresses=false'
+    scan_interval: 86400
+    timeout: 20
+    sensor:
+      - name: "Pendelcheck Station Brandenburg"
+        unique_id: pendelcheck_station_brandenburg
+        icon: mdi:train-car
+        value_template: "{{ value_json[0].id if value_json is iterable and value_json | count > 0 else none }}"
+
+  - resource: 'https://v6.vbb.transport.rest/locations?query=Berlin%20Jungfernheide&results=1&poi=false&addresses=false'
+    scan_interval: 86400
+    timeout: 20
+    sensor:
+      - name: "Pendelcheck Station Jungfernheide"
+        unique_id: pendelcheck_station_jungfernheide
+        icon: mdi:train-car
+        value_template: "{{ value_json[0].id if value_json is iterable and value_json | count > 0 else none }}"
+
+  - resource: 'https://v6.vbb.transport.rest/locations?query=Berlin%20Charlottenburg%20Bahnhof&results=1&poi=false&addresses=false'
+    scan_interval: 86400
+    timeout: 20
+    sensor:
+      - name: "Pendelcheck Station Charlottenburg"
+        unique_id: pendelcheck_station_charlottenburg
+        icon: mdi:train-car
+        value_template: "{{ value_json[0].id if value_json is iterable and value_json | count > 0 else none }}"
+
+  - resource_template: 'https://v6.vbb.transport.rest/journeys?from={{ states(''sensor.pendelcheck_station_wustermark'') }}&to={{ states(''sensor.pendelcheck_station_jungfernheide'') }}&arrival={% set t = today_at(''07:40'') %}{{ (t if now() < t else t + timedelta(days=1)).isoformat() | urlencode }}&results=3&stopovers=false&polylines=false&remarks=false'
+    scan_interval: 600
+    timeout: 30
+    sensor:
+      - name: "Pendelcheck Hinfahrt Wustermark Verspätung"
+        unique_id: pendelcheck_hin_wustermark_verspaetung
+        icon: mdi:clock-alert-outline
+        unit_of_measurement: min
+        state_class: measurement
+        value_template: '{% set ns = namespace(d=[]) %}{% for j in value_json.journeys[:3] %}{% set l = j.legs | last %}{% set ns.d = ns.d + [((l.arrivalDelay or 0) / 60) | round(0) | int] %}{% endfor %}{{ [ns.d | min, 0] | max if ns.d else 0 }}'
+      - name: "Pendelcheck Hinfahrt Wustermark Zuverlässigkeit"
+        unique_id: pendelcheck_hin_wustermark_zuverlaessigkeit
+        icon: mdi:check-decagram-outline
+        unit_of_measurement: "%"
+        state_class: measurement
+        value_template: '{% set ns = namespace(d=[]) %}{% for j in value_json.journeys[:3] %}{% set l = j.legs | last %}{% set ns.d = ns.d + [((l.arrivalDelay or 0) / 60) | round(0) | int] %}{% endfor %}{% set ns2 = namespace(c=false) %}{% for j in value_json.journeys[:3] %}{% for l in j.legs %}{% if l.cancelled %}{% set ns2.c = true %}{% endif %}{% endfor %}{% endfor %}{% set w = [ns.d | max, 0] | max if ns.d else 0 %}{{ [[98 - w * 3 - (25 if ns2.c else 0), 35] | max, 99] | min }}'
+      - name: "Pendelcheck Hinfahrt Wustermark Verbindungen"
+        unique_id: pendelcheck_hin_wustermark_verbindungen
+        icon: mdi:train
+        value_template: '{% set ns = namespace(o=[]) %}{% for j in value_json.journeys[:3] %}{% set f = j.legs | first %}{% set l = j.legs | last %}{% set ln = j.legs | selectattr(''line'', ''defined'') | map(attribute=''line.name'') | first | default('''') %}{% set dep = (f.departure or f.plannedDeparture) | as_datetime | as_local %}{% set arr = (l.arrival or l.plannedArrival) | as_datetime | as_local %}{% set d = ((l.arrivalDelay or 0) / 60) | round(0) | int %}{% set x = j.legs | selectattr(''cancelled'', ''defined'') | selectattr(''cancelled'') | list | count > 0 %}{% set ns.o = ns.o + [dep.strftime(''%H:%M'') ~ ''→'' ~ arr.strftime(''%H:%M'') ~ '' '' ~ ln ~ ('' AUSFALL'' if x else ('' +'' ~ d if d > 0 else ''''))] %}{% endfor %}{{ ns.o | join('' | '') if ns.o else ''keine Verbindung'' }}'
+    binary_sensor:
+      - name: "Pendelcheck Hinfahrt Wustermark Zugausfall"
+        unique_id: pendelcheck_hin_wustermark_zugausfall
+        device_class: problem
+        value_template: '{% set ns2 = namespace(c=false) %}{% for j in value_json.journeys[:3] %}{% for l in j.legs %}{% if l.cancelled %}{% set ns2.c = true %}{% endif %}{% endfor %}{% endfor %}{{ ns2.c }}'
+
+  - resource_template: 'https://v6.vbb.transport.rest/journeys?from={{ states(''sensor.pendelcheck_station_nauen'') }}&to={{ states(''sensor.pendelcheck_station_jungfernheide'') }}&arrival={% set t = today_at(''07:40'') %}{{ (t if now() < t else t + timedelta(days=1)).isoformat() | urlencode }}&results=3&stopovers=false&polylines=false&remarks=false'
+    scan_interval: 600
+    timeout: 30
+    sensor:
+      - name: "Pendelcheck Hinfahrt Nauen Verspätung"
+        unique_id: pendelcheck_hin_nauen_verspaetung
+        icon: mdi:clock-alert-outline
+        unit_of_measurement: min
+        state_class: measurement
+        value_template: '{% set ns = namespace(d=[]) %}{% for j in value_json.journeys[:3] %}{% set l = j.legs | last %}{% set ns.d = ns.d + [((l.arrivalDelay or 0) / 60) | round(0) | int] %}{% endfor %}{{ [ns.d | min, 0] | max if ns.d else 0 }}'
+      - name: "Pendelcheck Hinfahrt Nauen Zuverlässigkeit"
+        unique_id: pendelcheck_hin_nauen_zuverlaessigkeit
+        icon: mdi:check-decagram-outline
+        unit_of_measurement: "%"
+        state_class: measurement
+        value_template: '{% set ns = namespace(d=[]) %}{% for j in value_json.journeys[:3] %}{% set l = j.legs | last %}{% set ns.d = ns.d + [((l.arrivalDelay or 0) / 60) | round(0) | int] %}{% endfor %}{% set ns2 = namespace(c=false) %}{% for j in value_json.journeys[:3] %}{% for l in j.legs %}{% if l.cancelled %}{% set ns2.c = true %}{% endif %}{% endfor %}{% endfor %}{% set w = [ns.d | max, 0] | max if ns.d else 0 %}{{ [[98 - w * 3 - (25 if ns2.c else 0), 35] | max, 99] | min }}'
+      - name: "Pendelcheck Hinfahrt Nauen Verbindungen"
+        unique_id: pendelcheck_hin_nauen_verbindungen
+        icon: mdi:train
+        value_template: '{% set ns = namespace(o=[]) %}{% for j in value_json.journeys[:3] %}{% set f = j.legs | first %}{% set l = j.legs | last %}{% set ln = j.legs | selectattr(''line'', ''defined'') | map(attribute=''line.name'') | first | default('''') %}{% set dep = (f.departure or f.plannedDeparture) | as_datetime | as_local %}{% set arr = (l.arrival or l.plannedArrival) | as_datetime | as_local %}{% set d = ((l.arrivalDelay or 0) / 60) | round(0) | int %}{% set x = j.legs | selectattr(''cancelled'', ''defined'') | selectattr(''cancelled'') | list | count > 0 %}{% set ns.o = ns.o + [dep.strftime(''%H:%M'') ~ ''→'' ~ arr.strftime(''%H:%M'') ~ '' '' ~ ln ~ ('' AUSFALL'' if x else ('' +'' ~ d if d > 0 else ''''))] %}{% endfor %}{{ ns.o | join('' | '') if ns.o else ''keine Verbindung'' }}'
+    binary_sensor:
+      - name: "Pendelcheck Hinfahrt Nauen Zugausfall"
+        unique_id: pendelcheck_hin_nauen_zugausfall
+        device_class: problem
+        value_template: '{% set ns2 = namespace(c=false) %}{% for j in value_json.journeys[:3] %}{% for l in j.legs %}{% if l.cancelled %}{% set ns2.c = true %}{% endif %}{% endfor %}{% endfor %}{{ ns2.c }}'
+
+  - resource_template: 'https://v6.vbb.transport.rest/journeys?from={{ states(''sensor.pendelcheck_station_brandenburg'') }}&to={{ states(''sensor.pendelcheck_station_charlottenburg'') }}&arrival={% set t = today_at(''07:40'') %}{{ (t if now() < t else t + timedelta(days=1)).isoformat() | urlencode }}&results=3&stopovers=false&polylines=false&remarks=false'
+    scan_interval: 600
+    timeout: 30
+    sensor:
+      - name: "Pendelcheck Hinfahrt Brandenburg Verspätung"
+        unique_id: pendelcheck_hin_brandenburg_verspaetung
+        icon: mdi:clock-alert-outline
+        unit_of_measurement: min
+        state_class: measurement
+        value_template: '{% set ns = namespace(d=[]) %}{% for j in value_json.journeys[:3] %}{% set l = j.legs | last %}{% set ns.d = ns.d + [((l.arrivalDelay or 0) / 60) | round(0) | int] %}{% endfor %}{{ [ns.d | min, 0] | max if ns.d else 0 }}'
+      - name: "Pendelcheck Hinfahrt Brandenburg Zuverlässigkeit"
+        unique_id: pendelcheck_hin_brandenburg_zuverlaessigkeit
+        icon: mdi:check-decagram-outline
+        unit_of_measurement: "%"
+        state_class: measurement
+        value_template: '{% set ns = namespace(d=[]) %}{% for j in value_json.journeys[:3] %}{% set l = j.legs | last %}{% set ns.d = ns.d + [((l.arrivalDelay or 0) / 60) | round(0) | int] %}{% endfor %}{% set ns2 = namespace(c=false) %}{% for j in value_json.journeys[:3] %}{% for l in j.legs %}{% if l.cancelled %}{% set ns2.c = true %}{% endif %}{% endfor %}{% endfor %}{% set w = [ns.d | max, 0] | max if ns.d else 0 %}{{ [[98 - w * 3 - (25 if ns2.c else 0), 35] | max, 99] | min }}'
+      - name: "Pendelcheck Hinfahrt Brandenburg Verbindungen"
+        unique_id: pendelcheck_hin_brandenburg_verbindungen
+        icon: mdi:train
+        value_template: '{% set ns = namespace(o=[]) %}{% for j in value_json.journeys[:3] %}{% set f = j.legs | first %}{% set l = j.legs | last %}{% set ln = j.legs | selectattr(''line'', ''defined'') | map(attribute=''line.name'') | first | default('''') %}{% set dep = (f.departure or f.plannedDeparture) | as_datetime | as_local %}{% set arr = (l.arrival or l.plannedArrival) | as_datetime | as_local %}{% set d = ((l.arrivalDelay or 0) / 60) | round(0) | int %}{% set x = j.legs | selectattr(''cancelled'', ''defined'') | selectattr(''cancelled'') | list | count > 0 %}{% set ns.o = ns.o + [dep.strftime(''%H:%M'') ~ ''→'' ~ arr.strftime(''%H:%M'') ~ '' '' ~ ln ~ ('' AUSFALL'' if x else ('' +'' ~ d if d > 0 else ''''))] %}{% endfor %}{{ ns.o | join('' | '') if ns.o else ''keine Verbindung'' }}'
+    binary_sensor:
+      - name: "Pendelcheck Hinfahrt Brandenburg Zugausfall"
+        unique_id: pendelcheck_hin_brandenburg_zugausfall
+        device_class: problem
+        value_template: '{% set ns2 = namespace(c=false) %}{% for j in value_json.journeys[:3] %}{% for l in j.legs %}{% if l.cancelled %}{% set ns2.c = true %}{% endif %}{% endfor %}{% endfor %}{{ ns2.c }}'
+
+  - resource_template: 'https://v6.vbb.transport.rest/journeys?from={{ states(''sensor.pendelcheck_station_jungfernheide'') }}&to={{ states(''sensor.pendelcheck_station_wustermark'') }}&departure={% set t = today_at(''16:40'') %}{{ (t if now() < t else t + timedelta(days=1)).isoformat() | urlencode }}&results=3&stopovers=false&polylines=false&remarks=false'
+    scan_interval: 600
+    timeout: 30
+    sensor:
+      - name: "Pendelcheck Rückfahrt Wustermark Verspätung"
+        unique_id: pendelcheck_rueck_wustermark_verspaetung
+        icon: mdi:clock-alert-outline
+        unit_of_measurement: min
+        state_class: measurement
+        value_template: '{% set ns = namespace(d=[]) %}{% for j in value_json.journeys[:3] %}{% set l = j.legs | last %}{% set ns.d = ns.d + [((l.arrivalDelay or 0) / 60) | round(0) | int] %}{% endfor %}{{ [ns.d | min, 0] | max if ns.d else 0 }}'
+      - name: "Pendelcheck Rückfahrt Wustermark Zuverlässigkeit"
+        unique_id: pendelcheck_rueck_wustermark_zuverlaessigkeit
+        icon: mdi:check-decagram-outline
+        unit_of_measurement: "%"
+        state_class: measurement
+        value_template: '{% set ns = namespace(d=[]) %}{% for j in value_json.journeys[:3] %}{% set l = j.legs | last %}{% set ns.d = ns.d + [((l.arrivalDelay or 0) / 60) | round(0) | int] %}{% endfor %}{% set ns2 = namespace(c=false) %}{% for j in value_json.journeys[:3] %}{% for l in j.legs %}{% if l.cancelled %}{% set ns2.c = true %}{% endif %}{% endfor %}{% endfor %}{% set w = [ns.d | max, 0] | max if ns.d else 0 %}{{ [[98 - w * 3 - (25 if ns2.c else 0), 35] | max, 99] | min }}'
+      - name: "Pendelcheck Rückfahrt Wustermark Verbindungen"
+        unique_id: pendelcheck_rueck_wustermark_verbindungen
+        icon: mdi:train
+        value_template: '{% set ns = namespace(o=[]) %}{% for j in value_json.journeys[:3] %}{% set f = j.legs | first %}{% set l = j.legs | last %}{% set ln = j.legs | selectattr(''line'', ''defined'') | map(attribute=''line.name'') | first | default('''') %}{% set dep = (f.departure or f.plannedDeparture) | as_datetime | as_local %}{% set arr = (l.arrival or l.plannedArrival) | as_datetime | as_local %}{% set d = ((l.arrivalDelay or 0) / 60) | round(0) | int %}{% set x = j.legs | selectattr(''cancelled'', ''defined'') | selectattr(''cancelled'') | list | count > 0 %}{% set ns.o = ns.o + [dep.strftime(''%H:%M'') ~ ''→'' ~ arr.strftime(''%H:%M'') ~ '' '' ~ ln ~ ('' AUSFALL'' if x else ('' +'' ~ d if d > 0 else ''''))] %}{% endfor %}{{ ns.o | join('' | '') if ns.o else ''keine Verbindung'' }}'
+    binary_sensor:
+      - name: "Pendelcheck Rückfahrt Wustermark Zugausfall"
+        unique_id: pendelcheck_rueck_wustermark_zugausfall
+        device_class: problem
+        value_template: '{% set ns2 = namespace(c=false) %}{% for j in value_json.journeys[:3] %}{% for l in j.legs %}{% if l.cancelled %}{% set ns2.c = true %}{% endif %}{% endfor %}{% endfor %}{{ ns2.c }}'
+
+  - resource_template: 'https://v6.vbb.transport.rest/journeys?from={{ states(''sensor.pendelcheck_station_jungfernheide'') }}&to={{ states(''sensor.pendelcheck_station_nauen'') }}&departure={% set t = today_at(''16:40'') %}{{ (t if now() < t else t + timedelta(days=1)).isoformat() | urlencode }}&results=3&stopovers=false&polylines=false&remarks=false'
+    scan_interval: 600
+    timeout: 30
+    sensor:
+      - name: "Pendelcheck Rückfahrt Nauen Verspätung"
+        unique_id: pendelcheck_rueck_nauen_verspaetung
+        icon: mdi:clock-alert-outline
+        unit_of_measurement: min
+        state_class: measurement
+        value_template: '{% set ns = namespace(d=[]) %}{% for j in value_json.journeys[:3] %}{% set l = j.legs | last %}{% set ns.d = ns.d + [((l.arrivalDelay or 0) / 60) | round(0) | int] %}{% endfor %}{{ [ns.d | min, 0] | max if ns.d else 0 }}'
+      - name: "Pendelcheck Rückfahrt Nauen Zuverlässigkeit"
+        unique_id: pendelcheck_rueck_nauen_zuverlaessigkeit
+        icon: mdi:check-decagram-outline
+        unit_of_measurement: "%"
+        state_class: measurement
+        value_template: '{% set ns = namespace(d=[]) %}{% for j in value_json.journeys[:3] %}{% set l = j.legs | last %}{% set ns.d = ns.d + [((l.arrivalDelay or 0) / 60) | round(0) | int] %}{% endfor %}{% set ns2 = namespace(c=false) %}{% for j in value_json.journeys[:3] %}{% for l in j.legs %}{% if l.cancelled %}{% set ns2.c = true %}{% endif %}{% endfor %}{% endfor %}{% set w = [ns.d | max, 0] | max if ns.d else 0 %}{{ [[98 - w * 3 - (25 if ns2.c else 0), 35] | max, 99] | min }}'
+      - name: "Pendelcheck Rückfahrt Nauen Verbindungen"
+        unique_id: pendelcheck_rueck_nauen_verbindungen
+        icon: mdi:train
+        value_template: '{% set ns = namespace(o=[]) %}{% for j in value_json.journeys[:3] %}{% set f = j.legs | first %}{% set l = j.legs | last %}{% set ln = j.legs | selectattr(''line'', ''defined'') | map(attribute=''line.name'') | first | default('''') %}{% set dep = (f.departure or f.plannedDeparture) | as_datetime | as_local %}{% set arr = (l.arrival or l.plannedArrival) | as_datetime | as_local %}{% set d = ((l.arrivalDelay or 0) / 60) | round(0) | int %}{% set x = j.legs | selectattr(''cancelled'', ''defined'') | selectattr(''cancelled'') | list | count > 0 %}{% set ns.o = ns.o + [dep.strftime(''%H:%M'') ~ ''→'' ~ arr.strftime(''%H:%M'') ~ '' '' ~ ln ~ ('' AUSFALL'' if x else ('' +'' ~ d if d > 0 else ''''))] %}{% endfor %}{{ ns.o | join('' | '') if ns.o else ''keine Verbindung'' }}'
+    binary_sensor:
+      - name: "Pendelcheck Rückfahrt Nauen Zugausfall"
+        unique_id: pendelcheck_rueck_nauen_zugausfall
+        device_class: problem
+        value_template: '{% set ns2 = namespace(c=false) %}{% for j in value_json.journeys[:3] %}{% for l in j.legs %}{% if l.cancelled %}{% set ns2.c = true %}{% endif %}{% endfor %}{% endfor %}{{ ns2.c }}'
+
+  - resource_template: 'https://v6.vbb.transport.rest/journeys?from={{ states(''sensor.pendelcheck_station_charlottenburg'') }}&to={{ states(''sensor.pendelcheck_station_brandenburg'') }}&departure={% set t = today_at(''16:40'') %}{{ (t if now() < t else t + timedelta(days=1)).isoformat() | urlencode }}&results=3&stopovers=false&polylines=false&remarks=false'
+    scan_interval: 600
+    timeout: 30
+    sensor:
+      - name: "Pendelcheck Rückfahrt Brandenburg Verspätung"
+        unique_id: pendelcheck_rueck_brandenburg_verspaetung
+        icon: mdi:clock-alert-outline
+        unit_of_measurement: min
+        state_class: measurement
+        value_template: '{% set ns = namespace(d=[]) %}{% for j in value_json.journeys[:3] %}{% set l = j.legs | last %}{% set ns.d = ns.d + [((l.arrivalDelay or 0) / 60) | round(0) | int] %}{% endfor %}{{ [ns.d | min, 0] | max if ns.d else 0 }}'
+      - name: "Pendelcheck Rückfahrt Brandenburg Zuverlässigkeit"
+        unique_id: pendelcheck_rueck_brandenburg_zuverlaessigkeit
+        icon: mdi:check-decagram-outline
+        unit_of_measurement: "%"
+        state_class: measurement
+        value_template: '{% set ns = namespace(d=[]) %}{% for j in value_json.journeys[:3] %}{% set l = j.legs | last %}{% set ns.d = ns.d + [((l.arrivalDelay or 0) / 60) | round(0) | int] %}{% endfor %}{% set ns2 = namespace(c=false) %}{% for j in value_json.journeys[:3] %}{% for l in j.legs %}{% if l.cancelled %}{% set ns2.c = true %}{% endif %}{% endfor %}{% endfor %}{% set w = [ns.d | max, 0] | max if ns.d else 0 %}{{ [[98 - w * 3 - (25 if ns2.c else 0), 35] | max, 99] | min }}'
+      - name: "Pendelcheck Rückfahrt Brandenburg Verbindungen"
+        unique_id: pendelcheck_rueck_brandenburg_verbindungen
+        icon: mdi:train
+        value_template: '{% set ns = namespace(o=[]) %}{% for j in value_json.journeys[:3] %}{% set f = j.legs | first %}{% set l = j.legs | last %}{% set ln = j.legs | selectattr(''line'', ''defined'') | map(attribute=''line.name'') | first | default('''') %}{% set dep = (f.departure or f.plannedDeparture) | as_datetime | as_local %}{% set arr = (l.arrival or l.plannedArrival) | as_datetime | as_local %}{% set d = ((l.arrivalDelay or 0) / 60) | round(0) | int %}{% set x = j.legs | selectattr(''cancelled'', ''defined'') | selectattr(''cancelled'') | list | count > 0 %}{% set ns.o = ns.o + [dep.strftime(''%H:%M'') ~ ''→'' ~ arr.strftime(''%H:%M'') ~ '' '' ~ ln ~ ('' AUSFALL'' if x else ('' +'' ~ d if d > 0 else ''''))] %}{% endfor %}{{ ns.o | join('' | '') if ns.o else ''keine Verbindung'' }}'
+    binary_sensor:
+      - name: "Pendelcheck Rückfahrt Brandenburg Zugausfall"
+        unique_id: pendelcheck_rueck_brandenburg_zugausfall
+        device_class: problem
+        value_template: '{% set ns2 = namespace(c=false) %}{% for j in value_json.journeys[:3] %}{% for l in j.legs %}{% if l.cancelled %}{% set ns2.c = true %}{% endif %}{% endfor %}{% endfor %}{{ ns2.c }}'
+
+template:
+  - sensor:
+      - name: "Pendelcheck Hinfahrt Empfehlung"
+        unique_id: pendelcheck_hin_empfehlung
+        icon: mdi:star-outline
+        state: '{% set r = [(''Wustermark'', states(''sensor.pendelcheck_hinfahrt_wustermark_zuverlassigkeit'') | int(0)), (''Nauen'', states(''sensor.pendelcheck_hinfahrt_nauen_zuverlassigkeit'') | int(0)), (''Brandenburg'', states(''sensor.pendelcheck_hinfahrt_brandenburg_zuverlassigkeit'') | int(0))] | sort(attribute=1, reverse=true) %}{{ r[0][0] if r[0][1] > 0 else ''unbekannt'' }}'
+      - name: "Pendelcheck Rückfahrt Empfehlung"
+        unique_id: pendelcheck_rueck_empfehlung
+        icon: mdi:star-outline
+        state: '{% set r = [(''Wustermark'', states(''sensor.pendelcheck_ruckfahrt_wustermark_zuverlassigkeit'') | int(0)), (''Nauen'', states(''sensor.pendelcheck_ruckfahrt_nauen_zuverlassigkeit'') | int(0)), (''Brandenburg'', states(''sensor.pendelcheck_ruckfahrt_brandenburg_zuverlassigkeit'') | int(0))] | sort(attribute=1, reverse=true) %}{{ r[0][0] if r[0][1] > 0 else ''unbekannt'' }}'
